@@ -1,0 +1,41 @@
+{
+	"eng_title" : "The Engineer",
+	"eng_desc" : "You don't win fights, your machines do. Set up a Sentry Gun, drop a Dispenser to keep the team fed, and never get left without your gear.\n\n##Equip a Sentry Gun (or Silenced Sentry Gun) as your deployable to get the most from this deck.##",
+
+	"eng_1" : "Set Up Shop",
+	"eng_1_desc" : "You pack a portable Dispenser instead of a grenade.\n\nReplaces your throwable with the ##Dispenser##: a deployable that heals and resupplies you and nearby teammates. Recharges on a cooldown.",
+
+	"eng_2" : "Helmet Popping",
+	"eng_2_desc" : "Increases your headshot damage by ##25%##.",
+
+	"eng_3" : "Auto-Wrench",
+	"eng_3_desc" : "Your gear looks after itself.\n\nWhen your sentry gun is destroyed, it is ##refunded to your inventory## so you can redeploy it.\nYour sentry guns gain ##60%## more health.",
+
+	"eng_4" : "Blending In",
+	"eng_4_desc" : "You gain ##+1## concealment.\nWhen wearing armor, your movement speed is ##15%## less affected.\nYou gain ##45%## more experience when you complete days and jobs.",
+
+	"eng_5" : "Dispenser Mk.II",
+	"eng_5_desc" : "An upgraded support module.\n\nAllies standing in your Dispenser's field take ##15%## less damage.\nYour sentry guns carry ##50%## more ammunition.",
+
+	"eng_6" : "Scavenger",
+	"eng_6_desc" : "Increases your ammo pickup to ##135%## of the normal rate.",
+
+	"eng_7" : "Frontier Justice",
+	"eng_7_desc" : "Your sentries' work pays off.\n\nWhen one of your sentries is destroyed or recalled, you gain refilled ammo and a short damage surge based on how many kills it scored.\nYour sentry guns deal ##50%## more damage.",
+
+	"eng_8" : "Hard Wired",
+	"eng_8_desc" : "You do ##5%## more damage. Does not apply to melee, throwables, grenade launchers or the HRL-7.\nIncreases your doctor bag interaction speed by ##20%##.",
+
+	"eng_9" : "Move Out!",
+	"eng_9_desc" : "A good Engineer never stays put.\n\nYou can ##recall## a deployed sentry into your inventory and redeploy it anywhere with no cooldown.\nYou can carry ##+1## additional sentry gun, and your sentries fire ##armor-piercing## rounds.\n\nDeck Completion Bonus: your sentries deal an extra ##50%## damage.",
+
+	"bm_ability_eng_dispenser" : "Dispenser",
+	"bm_ability_eng_dispenser_desc" : "A deployable support module that heals and resupplies nearby teammates. Recharges on a cooldown.",
+
+	"menu_eng_sentry_armor" : "Sentry health boost",
+	"menu_eng_sentry_ammo" : "Sentry ammo boost",
+	"menu_eng_sentry_dmg" : "Sentry damage boost",
+	"menu_eng_sentry_dmg2" : "Sentry damage boost (signature)",
+	"menu_eng_sentry_amount" : "Additional sentry gun",
+	"menu_eng_disp_resist" : "Dispenser damage resistance"
+}
