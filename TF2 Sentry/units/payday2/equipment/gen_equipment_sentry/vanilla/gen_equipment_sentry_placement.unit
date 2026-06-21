@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<unit type="weapon" slot="25">
+  <object file="units/payday2/equipment/gen_equipment_sentry/gen_equipment_sentry" />
+  <network sync="spawn" />
+  <extensions>
+    <extension name="unit_data" class="ScriptUnitData" />
+    <extension name="event_listener" class="EventListenerHolder" />
+    <extension name="sentry_gun_equipment" class="SentryGunEquipment" />
+    <extension name="base" class="SentryGunBase" >
+    	<var name="sentry_gun" value="true" />
+			<var name="_tweak_table_id" value="sentry_gun" />
+			<var name="_place_snd_event" value="turret_place" />
+      <var name="_type" value="sentry_gun" />
+      <var name="_standard_contour_id" value="deployable_active" />
+      <var name="_ap_contour_id" value="deployable_interactable" />
+    </extension>
+    <extension name="network" class="NetworkBaseExtension" />
+    <extension name="brain" class="SentryGunBrain" />
+		<extension name="movement" class="SentryGunMovement">
+			<var name="_spin_obj_name" value="a_shield" />
+			<var name="_pitch_obj_name" value="a_gun" />
+			<var name="_pitch_min" value="-55" />
+			<var name="_pitch_max" value="35.5" />
+			<var name="_spin_start_snd_event" value="turret_spin_start" />
+			<var name="_spin_stop_snd_event" value="turret_spin_stop" />
+			<var name="_attention_acquired_snd_event" value="turret_alert" />
+		</extension>
+    <extension name="weapon" class="SentryGunWeapon" >
+    	<var name="name_id" value="sentry_gun" />
+			<var name="_fire_start_snd_event" value="turret_fire" />
+			<var name="_fire_stop_snd_event" value="turret_fire_end" />
+      <var name="_fire_start_snd_event_ap" value="turret_fire_ap" />
+      <var name="_fire_stop_snd_event_ap" value="turret_fire_ap_end" />
+			<var name="_fire_cooldown_snd_event" value="turret_cooldown" />
+			<var name="_depleted_snd_event" value="turret_ammo_depleted" />
+      <var name="_muzzle_flash_parent" value="fire" />
+      <var name="_alert_size" value="2500" />
+    </extension>
+    <extension name="contour" class="ContourExt" />
+    <extension name="damage" class="UnitDamage" />
+    <extension name="character_damage" class="SentryGunDamage" ><!-- IMPORTANT: This extension must always be last -->
+    	<var name="_ignore_client_damage" value="true" />
+    	<var name="_shield_body_name" value="shield" />
+			<var name="_bag_body_name" value="bag" />
+			<var name="_death_sequence_name" value="broken" />
+			<var name="_death_with_shield_sequence_name" value="broken_with_shield" />
+			<var name="_breakdown_snd_event" value="turret_breakdown" />
+      <var name="_destroy_snd_event" value="wp_sentrygun_destroy" />
+		</extension>
+  </extensions>
+  
+  <dependencies>
+  	<depends_on bnk="soundbanks/weapon_turret" />
+    <depends_on bnk="soundbanks/weapon_turret_ap" />
+    <depends_on effect="effects/particles/dest/security_camera_dest" />
+    <depends_on effect="effects/payday2/particles/electric/electric_sparks_turret" />
+    <depends_on effect="effects/payday2/particles/electric/electric_sparks_turret_50%" />
+    <depends_on effect="effects/payday2/particles/electric/electric_sparks_turret_dead" />
+    <depends_on effect="effects/payday2/environment/drill_jammed"/>
+  </dependencies>
+  
+  <sounds>
+    <default_soundsource source="a_detect"/>
+  </sounds>
+</unit>

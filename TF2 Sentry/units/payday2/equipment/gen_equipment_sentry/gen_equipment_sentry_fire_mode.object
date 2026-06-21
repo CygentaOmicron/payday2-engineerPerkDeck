@@ -1,0 +1,9 @@
+<dynamic_object>
+    <diesel materials="units/payday2/equipment/gen_equipment_sentry/gen_equipment_sentry_fire_mode" orientation_object="rp_cube" />
+    <bodies>
+        <body name="body_static" enabled="true" template="editor">
+            <object name="rp_cube" />
+            <object name="c_box" collision_type="box" padding="-2.5" />
+        </body>
+    </bodies>
+</dynamic_object>

@@ -36,6 +36,8 @@ Hooks:Add("LocalizationManagerPostInit", "EngineerDeck_Localization", function(l
 
 		["bm_ability_eng_dispenser"] = "Dispenser",
 		["bm_ability_eng_dispenser_desc"] = "A deployable support field that heals and resupplies nearby teammates. Recharges on a cooldown. While standing in it you also take less damage.",
+		-- shown as the throwable's "lock" reason: it's an ability granted by the deck, not a purchasable throwable
+		["bm_menu_skill_locked_eng_dispenser"] = "Granted by The Engineer perk deck.",
 
 		-- Engineer's Sentry deployable (custom loadout item, deck-gated)
 		["bm_equipment_eng_sentry_gun"] = "Engineer's Sentry",

@@ -1,0 +1,26 @@
+<mod name="The Engineer - TF2 Sentry" min_lib_ver="3.38">
+	<AddFiles directory="TF2 Sentry">
+		<model            path="units/payday2/equipment/gen_equipment_sentry/gen_equipment_sentry" force="true"/>
+		<object           path="units/payday2/equipment/gen_equipment_sentry/gen_equipment_sentry" force="true"/>
+		<material_config  path="units/payday2/equipment/gen_equipment_sentry/gen_equipment_sentry" force="true"/>
+		<texture          path="units/payday2/equipment/gen_equipment_sentry/tf_sentry_df" force="true"/>
+		<texture          path="units/payday2/equipment/gen_equipment_sentry/tf_sentry_nm" force="true"/>
+	</AddFiles>
+
+	<!-- Dispenser prop: combined doctor-bag (medicbag) unit, sentry-style.
+	     Override model + object + material_config so the unit carries BOTH the
+	     vanilla bag meshes (mtr_medic, default visible) and the tf_ Dispenser
+	     meshes (tf_mtr_medic, hidden by default - see the .object). The deck
+	     flips the tf_ meshes on only for the Engineer's own dispenser prop, so
+	     real doctor bags stay vanilla. The vanilla bag textures
+	     (gen_equipment_medicbag_df/_nm) are NOT overridden - mtr_medic uses the
+	     game's originals; the Dispenser skin lives at the separate tf_medic_df/_nm
+	     paths. -->
+	<AddFiles directory="TF2 Dispenser">
+		<model            path="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag" force="true"/>
+		<object           path="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag" force="true"/>
+		<material_config  path="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag" force="true"/>
+		<texture          path="units/payday2/equipment/gen_equipment_medicbag/tf_medic_df" force="true"/>
+		<texture          path="units/payday2/equipment/gen_equipment_medicbag/tf_medic_nm" force="true"/>
+	</AddFiles>
+</mod>

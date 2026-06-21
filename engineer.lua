@@ -27,13 +27,39 @@ local SURGE_PER_KILL   = 0.10
 local MAX_DISPENSERS = 1          -- redeploying removes the oldest
 local DRAW_RING      = true       -- ground ring showing the aura radius (set false to hide)
 
--- supply-themed props, tried in order; first one LOADED this heist is used
+-- supply-themed props, tried in order; first one LOADED this heist is used.
+-- gen_equipment_medicbag is the doctor-bag model we reskin (main.xml / TF2
+-- Dispenser) - preferred, but it's only loaded when a doctor bag is in the
+-- heist's loadout (common in MP, rare in solo where we run the sentry). The
+-- rest are fallbacks so the prop still appears when the medicbag isn't loaded.
+local MEDICBAG_PATH = "units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag"
 local DISP_PROP_CANDIDATES = {
+	MEDICBAG_PATH,                                                                      -- TF2 Dispenser (reskinned doctor-bag model)
 	"units/payday2/equipment/gen_equipment_ammo/gen_equipment_ammo",                   -- ammo bag
 	"units/payday2/equipment/gen_equipment_doctor_bag/gen_equipment_doctor_bag",       -- doctor bag
 	"units/payday2/equipment/gen_equipment_grenade_crate/gen_equipment_grenade_crate", -- grenade crate
 	"units/payday2/pickups/gen_pku_lootbag/gen_pku_lootbag",                            -- loot bag (often loaded)
 }
+
+-- TF2 Dispenser combined-model flip. The reskinned medicbag unit carries BOTH
+-- the vanilla bag meshes and the tf_ Dispenser meshes (hidden by default via
+-- the .object, so real doctor bags stay vanilla). On the prop WE spawn we hide
+-- the vanilla set and show the tf_ set, so only the Engineer's dispenser reads
+-- as the Dispenser. Same trick as the sentry skin, applied per-instance.
+local DISP_TF_HIDE = { "g_medic_bag", "g_kit_2", "g_kit_3", "g_kit_4" }
+local DISP_TF_SHOW = { "tf_g_medic_bag", "tf_g_kit_2", "tf_g_kit_3", "tf_g_kit_4" }
+
+local function apply_dispenser_tf_skin(unit)
+	if not alive(unit) then return end
+	pcall(function()
+		for _, name in ipairs(DISP_TF_HIDE) do
+			local o = unit:get_object(Idstring(name)); if o then o:set_visibility(false) end
+		end
+		for _, name in ipairs(DISP_TF_SHOW) do
+			local o = unit:get_object(Idstring(name)); if o then o:set_visibility(true) end
+		end
+	end)
+end
 
 -- ---- scrap economy --------------------------------------------------
 EngineerDeck.SCRAP_MAX = 150
@@ -42,8 +68,8 @@ local UPGRADE_COST = { [2] = 40, [3] = 100 }
 
 EngineerDeck.LEVELS = {
 	[1] = { damage = 1.00, capacity = 1.00, fire = 1.00 },
-	[2] = { damage = 1.25, capacity = 3.00, fire = 0.40 },
-	[3] = { damage = 1.50, capacity = 10.00, fire = 0.10 },
+	[2] = { damage = 1.10, capacity = 3.00, fire = 0.25 },
+	[3] = { damage = 1.25, capacity = 10.00, fire = 0.08 },
 }
 
 function EngineerDeck.upgrade_cost(to_level) return UPGRADE_COST[to_level] end
@@ -201,6 +227,8 @@ local function spawn_dispenser_prop(pos, rot)
 				-- cosmetic only: no interaction, no base update (we never setup() it)
 				pcall(function() if u:interaction() and u:interaction().set_active then u:interaction():set_active(false) end end)
 				pcall(function() u:set_extension_update_enabled(Idstring("base"), false) end)
+				-- if it's our reskinned medicbag, flip it to the tf_ Dispenser meshes
+				if path == MEDICBAG_PATH then apply_dispenser_tf_skin(u) end
 				log("[EngineerDeck] dispenser prop spawned: " .. path)
 				return u
 			end

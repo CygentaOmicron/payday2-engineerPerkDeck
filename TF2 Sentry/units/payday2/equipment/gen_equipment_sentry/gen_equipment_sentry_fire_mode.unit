@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<unit type="weapon" slot="25">
+  <object file="units/payday2/equipment/gen_equipment_sentry/gen_equipment_sentry_fire_mode" />
+  <network sync="spawn" />
+  <extensions>
+    <extension name="unit_data" class="ScriptUnitData" />
+    <extension name="interaction" class="SentryGunFireModeInteractionExt">
+      <var name="tweak_data" value="sentry_gun_fire_mode" />
+    </extension>
+    <extension name="contour" class="ContourExt" />
+    <extension name="damage" class="UnitDamage" />
+  </extensions>
+</unit>

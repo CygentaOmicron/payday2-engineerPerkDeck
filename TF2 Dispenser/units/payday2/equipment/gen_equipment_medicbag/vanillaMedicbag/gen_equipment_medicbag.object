@@ -1,0 +1,17 @@
+<dynamic_object>
+    <diesel orientation_object="rp_gen_equipment_medicbag" materials="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag" />
+	<sequence_manager file="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag" />
+		<bodies>
+			<body name="dynamic" enabled="false" template="dynamic_no_ray" collision_class="bag" collides_with_mover="false" >
+				<object name="rp_gen_equipment_medicbag" />
+				<object name="c_box_1" collision_type="box" padding="-2.5" />
+				<object name="c_box_2" collision_type="box" padding="-2.5" />
+			</body>
+		</bodies>
+    <graphics>
+        <object name="g_medic_bag" enabled="true" />
+        <object name="g_kit_2" enabled="true" />
+        <object name="g_kit_3" enabled="false" />
+        <object name="g_kit_4" enabled="false" />
+    </graphics>
+</dynamic_object>

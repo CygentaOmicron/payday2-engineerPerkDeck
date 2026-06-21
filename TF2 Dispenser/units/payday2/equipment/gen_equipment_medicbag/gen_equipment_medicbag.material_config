@@ -1,0 +1,14 @@
+<materials version="3">
+    <material unique="true" name="mtr_medic" render_template="generic:CONTOUR:DIFFUSE_TEXTURE:NORMALMAP" version="2">
+        <diffuse_texture file="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag_df"/>
+		<variable value="1" type="scalar" name="contour_opacity"/>
+		<variable value="0 1 0" type="vector3" name="contour_color"/>
+        <bump_normal_texture file="units/payday2/equipment/gen_equipment_medicbag/gen_equipment_medicbag_nm"/>
+    </material>
+    <material unique="true" name="tf_mtr_medic" render_template="generic:CONTOUR:DIFFUSE_TEXTURE:NORMALMAP" version="2">
+        <diffuse_texture file="units/payday2/equipment/gen_equipment_medicbag/tf_medic_df"/>
+		<variable value="1" type="scalar" name="contour_opacity"/>
+		<variable value="0 1 0" type="vector3" name="contour_color"/>
+        <bump_normal_texture file="units/payday2/equipment/gen_equipment_medicbag/tf_medic_nm"/>
+    </material>
+</materials>

@@ -1,11 +1,12 @@
 {
 	"name" : "The Engineer",
 	"description" : "TF2 Engineer-inspired turret perk deck: Sentry Gun + Dispenser throwable, refund-on-destroy, Frontier Justice surge, Recall, wrench repair & scrap-fuelled sentry upgrades, and a defensive damage-resistance core.",
-	"author" : "CygentaOmicron",
+	"author" : "Ocene",
 	"version" : "0.9",
 	"color" : "255 140 0",
 	"hooks" : [
 		{ "hook_id" : "lib/tweak_data/skilltreetweakdata", "script_path" : "skilltree.lua" },
+		{ "hook_id" : "lib/managers/skilltreemanager", "script_path" : "deck_swap.lua" },
 		{ "hook_id" : "lib/tweak_data/blackmarkettweakdata", "script_path" : "projectiles.lua" },
 		{ "hook_id" : "lib/tweak_data/blackmarkettweakdata", "script_path" : "deployables_tweak.lua" },
 		{ "hook_id" : "lib/tweak_data/equipmentstweakdata", "script_path" : "equipments_tweak.lua" },
@@ -13,6 +14,8 @@
 		{ "hook_id" : "lib/managers/localizationmanager", "script_path" : "localization.lua" },
 		{ "hook_id" : "lib/managers/playermanager", "script_path" : "engineer.lua" },
 		{ "hook_id" : "lib/managers/blackmarketmanager", "script_path" : "grenade.lua" },
+		{ "hook_id" : "lib/managers/blackmarketmanager", "script_path" : "blackmarket_fix.lua" },
+		{ "hook_id" : "lib/managers/blackmarketmanager", "script_path" : "icon.lua" },
 		{ "hook_id" : "lib/units/beings/player/playerdamage", "script_path" : "survivability.lua" },
 		{ "hook_id" : "lib/units/equipment/sentry_gun/sentrygunbase", "script_path" : "sentry.lua" },
 		{ "hook_id" : "lib/units/equipment/sentry_gun/sentrygundamage", "script_path" : "sentry_death.lua" },
