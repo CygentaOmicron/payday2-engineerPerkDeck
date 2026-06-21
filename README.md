@@ -4,3 +4,5 @@ WIP payday2 mod, emulating the TF2 engineer gameplay with a perkdeck, custom dis
 https://imgur.com/a/70TlRBO
 
 https://youtu.be/Ymxt9fyVNcI
+
+https://imgur.com/a/zyg8TRu
