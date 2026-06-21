@@ -68,8 +68,8 @@ local UPGRADE_COST = { [2] = 40, [3] = 100 }
 
 EngineerDeck.LEVELS = {
 	[1] = { damage = 1.00, capacity = 1.00, fire = 1.00 },
-	[2] = { damage = 1.10, capacity = 3.00, fire = 0.25 },
-	[3] = { damage = 1.25, capacity = 10.00, fire = 0.08 },
+	[2] = { damage = 1.50, capacity = 3.00, fire = 0.60 },
+	[3] = { damage = 2.00, capacity = 8.00, fire = 0.30 },
 }
 
 function EngineerDeck.upgrade_cost(to_level) return UPGRADE_COST[to_level] end

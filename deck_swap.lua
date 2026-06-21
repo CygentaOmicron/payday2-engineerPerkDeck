@@ -5,16 +5,19 @@
 --  specialization changes:
 --
 --   ENTER the Engineer deck:
---     - grant + default-equip the Dispenser throwable (eng_dispenser), so it's
---       the default but you can still swap it for any other throwable.
+--     - grant the Dispenser throwable and restore your last saved throwable
+--       pick for this deck (defaults to the Dispenser the first time). You can
+--       still swap it for anything; the swap is remembered (grenade.lua).
 --
 --   LEAVE the Engineer deck:
 --     - revert the deployable from the Engineer's Sentry back to the vanilla
 --       sentry (it's a real saved deployable, so it would otherwise persist).
 --     - re-lock the Dispenser throwable, reverting it to a normal grenade if
---       it was still equipped (mirrors how vanilla drops deck-bound gear).
+--       it was still equipped (mirrors how vanilla drops deck-bound gear). This
+--       runs with the deck already switched away, so it does NOT overwrite the
+--       saved Engineer throwable pick.
 --
---  Grant/revoke helpers live in grenade.lua; deployable revert is done here.
+--  Grant/restore/persist helpers live in grenade.lua; deployable revert here.
 -- =====================================================================
 
 EngineerDeck = EngineerDeck or {}
@@ -26,9 +29,14 @@ if SkillTreeManager and SkillTreeManager.set_current_specialization then
 			local on_engineer = EngineerDeck.is_current_deck and EngineerDeck.is_current_deck()
 
 			if on_engineer then
-				-- entered the Engineer deck: hand over the Dispenser as the default throwable
-				if EngineerDeck.unlock_dispenser then EngineerDeck.unlock_dispenser(true) end
-				if EngineerDeck.default_equip_dispenser then EngineerDeck.default_equip_dispenser() end
+				-- entered the Engineer deck: grant + restore your saved throwable pick
+				if EngineerDeck.restore_deck_throwable then
+					EngineerDeck.restore_deck_throwable()
+				elseif EngineerDeck.unlock_dispenser then
+					-- fallback if grenade.lua somehow isn't loaded yet
+					EngineerDeck.unlock_dispenser(true)
+					if EngineerDeck.default_equip_dispenser then EngineerDeck.default_equip_dispenser() end
+				end
 				return
 			end
 

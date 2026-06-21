@@ -10,29 +10,43 @@
 --  _fire_rate_reduction whenever fire mode is switched (normal<->AP), so we
 --  re-multiply by the sentry's stored _eng_fire_mult after each switch.
 --
---  --- FIRE AUDIO (SuperBLT XAudio, positional) -----------------------------
---  A clip plays on EVERY actual shot, so the audio cadence equals the real fire
---  rate - which is driven by sentry_buff.lua's base auto.fire_rate and
---  engineer.lua's per-level fire multiplier (and AP fire-mode, automatically).
---  No hardcoded interval, so it stays in sync through any rebalancing.
---  SHOT_DIVISOR > 1 plays every Nth shot (still proportional to fire rate) if
---  you want to thin the density at very high rates.
+--  --- FIRE AUDIO (TF2 looping minigun, SuperBLT XAudio) --------------------
+--  Goal: our TF2 turrets play the TF2 sentry sound and NOTHING vanilla.
 --
---  Clip SET depends on turret type: SentryGunBase:get_type() returns
---  "sentry_gun_silent" for the suppressed deployable, so suppressed sentries
---  use the Singlesuppressed_* clips and normal sentries use the single_* clips.
---  Cue starts at MIN_LEVEL.
+--  1) SILENCE VANILLA. The vanilla fire sound is a looping Wwise "autofire"
+--     event: SentryGunWeapon:start_autofire -> _sound_autofire_start posts it,
+--     and stop_autofire -> _sound_autofire_end/_end_empty/_end_cooldown stop it
+--     and post stop/cooldown/empty cues. We override those four methods so that
+--     on a TF2-skinned sentry they do nothing (and drop any lingering handle).
+--     Non-TF2 sentries keep their vanilla sound.
+--
+--  2) PLAY THE TF2 LOOP. The TF2 shoot file is a ~0.705s LOOP (not a one-shot),
+--     so per-shot playback would stack dozens of overlapping copies. Instead we
+--     re-trigger the clip on a timer: fire() runs once per shot, so on each shot
+--     we check whether LOOP_RETRIGGER seconds have elapsed since the last clip
+--     and, if so, start the next one. While the turret is firing this produces a
+--     continuous loop; when it stops firing the re-triggers stop and the last
+--     clip tails off on its own (a natural spin-down). Re-trigger is decoupled
+--     from fire rate, so even a very fast sentry only starts ~1 clip per 0.7s.
+--
+--  Clips are MONO OGG (XAudio is OGG-only, and stereo ignores 3D position), so
+--  the sound attenuates with distance from the turret. Gated to TF2-skinned
+--  sentries via base._eng_tf_skinned (same marker as the visual skin), so this
+--  only ever touches the local Engineer's own turrets.
 --
 --  SAFETY: blt.xaudio.loadbuffer raises a FATAL, pcall-proof error on a
---  missing/empty/bad file, so we (1) verify each file is a real OggS container
---  with io.open BEFORE loadbuffer, and (2) only attempt loading each set ONCE.
---  A bad file means silence for that set, never a crash/freeze.
---
---  NOTE: XAudio loads standard-libVorbis OGG only; STEREO tracks ignore 3D
---  position (export MONO if you want sentry-positional audio with falloff).
+--  missing/empty/bad file, so we (1) verify the file is a real OggS container
+--  with io.open BEFORE loading, and (2) only attempt to load the buffer ONCE.
+--  A bad/missing file means silence, never a crash/freeze.
 --
 --  The Dispenser chassis (_eng_dispenser) is a neutered sentry - it never fires,
 --  but we short-circuit it here anyway so no ammo/audio logic ever touches it.
+--
+--  --- TF2 LASER (disabled) -------------------------------------------------
+--  TF2 sentries have no laser sight. The visible beam is a separate peqbox unit
+--  the engine spawns/links when it calls SentryGunWeapon:set_laser_enabled with
+--  a non-nil mode; we override that to force the "off" path for our turrets, so
+--  the beam never spawns. (The laser MESH is hidden in sentry.lua.)
 --
 --  --- TF2 DUAL-BARREL CONVERGING FIRE --------------------------------------
 --  On the first shot of a TF2-skinned sentry we call EngineerDeck.apply_tf_muzzles
@@ -53,28 +67,26 @@ EngineerDeck = EngineerDeck or {}
 
 local AMMO_MULT = 2
 
--- BLT resolves paths from the PD2 root; ModPath is this mod's folder.
-local SND_DIR        = (ModPath or "mods/PD2 Perkdeck Mod/") .. "Sounds/"
-local SHOT_VOLUME    = 0.35
-local SHOT_MIN_DIST  = 350     -- cm: full volume within this range (mono files only)
-local SHOT_MAX_DIST  = 6000    -- cm: inaudible beyond this (mono files only)
-local SHOT_DIVISOR   = 1        -- play every Nth shot (1 = every shot = exact fire-rate sync)
-local MIN_LEVEL      = 1        -- play the cue at this sentry level or above (set 1 for all)
+-- Converged-fire aim: how far forward (cm) along the gun's aim line to START the
+-- centerline raycast. a_gun sits at the unit origin (ground level, at the base),
+-- so a ray from exactly there skims the floor and snags props sitting next to the
+-- turret (a fallen riot shield, a dropped bag). Starting AIM_SKIP forward ALONG
+-- the same aim line clears the base footprint without moving off the line (which
+-- is what matters - see tf_aim_point). Raise if base clutter still steals fire;
+-- lower if very close targets get missed.
+local AIM_SKIP = 200
 
--- one clip set per turret type; buffers load lazily and are cached
-local SETS = {
-	normal = {
-		files = { "single_1.ogg", "single_2.ogg", "single_3.ogg", "single_4.ogg",
-		          "single_5.ogg", "single_6.ogg", "single_7.ogg", "single_8.ogg" },
-		buffers = nil, tried = false,
-	},
-	silent = {
-		files = { "Singlesuppressed_1.ogg", "Singlesuppressed_2.ogg", "Singlesuppressed_3.ogg",
-		          "Singlesuppressed_4.ogg", "Singlesuppressed_5.ogg", "Singlesuppressed_6.ogg",
-		          "Singlesuppressed_7.ogg", "Singlesuppressed_8.ogg", "Singlesuppressed_9.ogg" },
-		buffers = nil, tried = false,
-	},
-}
+-- BLT resolves paths from the PD2 root; ModPath is this mod's folder.
+local SND_DIR        = (ModPath or "mods/PD2 Perkdeck Mod/") .. "Sounds/Sentry/"
+local FIRE_CLIP      = "sentry_shoot.ogg"  -- mono OGG; the looping TF2 fire (swap to "sentry_shoot.ogg" for the non-mini sentry)
+local SHOT_VOLUME    = 0.40      -- 0..1; this is now the ONLY fire sound, so louder than the old layered cue
+local SHOT_MIN_DIST  = 350      -- cm: full volume within this range
+local SHOT_MAX_DIST  = 6000     -- cm: inaudible beyond this
+local LOOP_RETRIGGER = 0.06     -- s: start the next clip this long after the last one. Slightly under the
+                                -- ~0.705s clip length so the loop has no audible gap. Tune up/down to taste.
+
+-- single shared buffer for the fire loop; loaded lazily, cached, tried once
+local fire_buf = { buffer = nil, tried = false }
 
 local function ammo_total(w)
 	if w.ammo_total then return w:ammo_total() end
@@ -87,24 +99,23 @@ local function set_total(w, n)
 	elseif w.set_ammo then w:set_ammo(n) end
 end
 
-local function sentry_level(self)
-	return (EngineerDeck.get_sentry_level and EngineerDeck.get_sentry_level(self._unit)) or 1
-end
-
 local function is_dispenser(self)
 	local d
 	pcall(function() d = self._unit and self._unit:base() and self._unit:base()._eng_dispenser end)
 	return d and true or false
 end
 
-local function sentry_is_silenced(unit)
-	local t
-	pcall(function() t = unit:base() and unit:base().get_type and unit:base():get_type() end)
-	return t == "sentry_gun_silent"
+-- true only for the local Engineer's TF2-skinned turrets (same marker the visual
+-- skin sets). Gates the vanilla-sound silencing, the laser kill and the TF2 loop,
+-- so other players' / non-Engineer sentries are left completely vanilla.
+local function is_modded_sentry(self)
+	local m
+	pcall(function() m = self._unit and self._unit:base() and self._unit:base()._eng_tf_skinned end)
+	return m and true or false
 end
 
--- true only if the file exists and begins with the "OggS" magic. This gates
--- loadbuffer so we never hand it a missing/empty/non-ogg file (which fatals).
+-- true only if the file exists and begins with the "OggS" magic. This gates the
+-- buffer load so we never hand XAudio a missing/empty/non-ogg file (which fatals).
 local function is_valid_ogg(path)
 	local ok, valid = pcall(function()
 		local f = io.open(path, "rb")
@@ -116,35 +127,27 @@ local function is_valid_ogg(path)
 	return ok and valid == true
 end
 
--- load a set's buffers ONCE (cached). Never retries, so a bad file can't loop.
-local function ensure_set(set)
-	if set.buffers then return true end
-	if set.tried then return false end
-	set.tried = true
+-- load the fire buffer ONCE (cached). Never retries, so a bad file can't loop.
+local function ensure_fire_buffer()
+	if fire_buf.buffer then return true end
+	if fire_buf.tried then return false end
+	fire_buf.tried = true
 	if not (blt and blt.xaudio and XAudio and XAudio.Buffer and XAudio.Source) then return false end
 	pcall(function() blt.xaudio.setup() end)
-	local loaded = {}
-	for _, f in ipairs(set.files) do
-		local path = SND_DIR .. f
-		if is_valid_ogg(path) then
-			pcall(function()
-				local b = XAudio.Buffer:new(path)
-				if b then table.insert(loaded, b) end
-			end)
-		else
-			log("[EngineerDeck] minigun sound skipped (missing/empty/not-ogg): " .. tostring(path))
-		end
+	local path = SND_DIR .. FIRE_CLIP
+	if not is_valid_ogg(path) then
+		log("[EngineerDeck] TF2 fire clip missing/empty/not-ogg: " .. tostring(path))
+		return false
 	end
-	if #loaded > 0 then set.buffers = loaded end
-	return set.buffers ~= nil
+	pcall(function() fire_buf.buffer = XAudio.Buffer:new(path) end)
+	return fire_buf.buffer ~= nil
 end
 
-local function play_shot(sentry)
-	local set = sentry_is_silenced(sentry) and SETS.silent or SETS.normal
-	if not ensure_set(set) then return end
+-- start one positional instance of the fire loop at the turret
+local function play_fire_loop(sentry)
+	if not ensure_fire_buffer() then return end
 	pcall(function()
-		local buf = set.buffers[math.random(#set.buffers)]
-		local src = XAudio.Source:new(buf)   -- auto-plays and auto-closes when done
+		local src = XAudio.Source:new(fire_buf.buffer)   -- auto-plays and auto-closes when done
 		if not src then return end
 		if src.set_position and alive(sentry) then src:set_position(sentry:position()) end
 		if src.set_min_distance then src:set_min_distance(SHOT_MIN_DIST) end
@@ -153,15 +156,15 @@ local function play_shot(sentry)
 	end)
 end
 
--- fires once per real shot, so the audio cadence == the actual fire rate
+-- runs once per real shot; re-triggers the loop clip on a fixed cadence (NOT per
+-- shot), so it stays continuous at any fire rate and tails off when firing stops.
 local function fire_audio(self, fired)
 	if not fired then return end
-	if sentry_level(self) < MIN_LEVEL then return end
-	if SHOT_DIVISOR > 1 then
-		self._eng_snd_count = (self._eng_snd_count or 0) + 1
-		if self._eng_snd_count % SHOT_DIVISOR ~= 0 then return end
-	end
-	play_shot(self._unit)
+	if not is_modded_sentry(self) then return end
+	local now = TimerManager:game():time()
+	if self._eng_loop_next and now < self._eng_loop_next then return end
+	self._eng_loop_next = now + LOOP_RETRIGGER
+	play_fire_loop(self._unit)
 end
 
 -- set up a TF2-skinned sentry's two muzzle slots onto the model's barrels.
@@ -178,18 +181,30 @@ if SentryGunWeapon and SentryGunWeapon.fire then
 	local orig_fire = SentryGunWeapon.fire
 
 	-- Raycast the gun's centerline to find the point it's actually aimed at, so
-	-- the off-centerline barrels can converge on it. a_gun is the pitch object;
-	-- after the export flattening it sits at the unit origin with the aim baked
-	-- into its rotation, so a ray from a_gun:position() along a_gun:rotation():y()
-	-- is the true aim line (the same line vanilla fires along). Fully guarded -
+	-- the off-centerline barrels can converge on it.
+	--
+	-- a_gun is the pitch object. After the model export its ROTATION still carries
+	-- the true aim, but its POSITION collapsed to the unit origin (ground level).
+	-- The movement aims a_gun so that a ray FROM the origin along its forward hits
+	-- the target's center mass - so the centerline ray MUST stay on that line
+	-- (origin + t*dir). (An earlier attempt started the ray at the barrels' height
+	-- to dodge base clutter; that moved it off the aim line and the shots flew high
+	-- by the barrel height - don't do that.)
+	--
+	-- The only real problem is that starting exactly at the origin makes the ray
+	-- skim the floor, so a prop right next to the turret intercepts it at point-
+	-- blank range. So we start the ray AIM_SKIP forward ALONG the same line: still
+	-- on the aim line (the found point is still the true target), just past the
+	-- base footprint. Targets sit well beyond this; a closer enemy still gets hit
+	-- (worst case is the small barrel offset at point-blank). Fully guarded -
 	-- returns nil on any trouble so the caller falls back to straight fire.
 	local function tf_aim_point(self)
 		local aim
 		pcall(function()
 			local a_gun = self._unit:get_object(Idstring("a_gun"))
 			if not a_gun then return end
-			local c_from = a_gun:position()
 			local c_dir = a_gun:rotation():y()
+			local c_from = a_gun:position() + c_dir * AIM_SKIP   -- on the aim line, just past the base
 			local td = tweak_data.weapon[self._name_id]
 			local rng = (td and td.FIRE_RANGE) or 10000
 			local c_to = c_from + c_dir * rng
@@ -275,6 +290,49 @@ if SentryGunWeapon and SentryGunWeapon.fire then
 		end
 		pcall(function() fire_audio(self, r) end)
 		return r
+	end
+end
+
+-- Silence the vanilla Wwise fire sound on our TF2 turrets. These four methods
+-- are the only places the sentry posts its autofire start/stop/cooldown/empty
+-- cues; for a TF2-skinned sentry we drop them entirely (the TF2 loop plays
+-- instead). Every other sentry keeps its vanilla sound untouched.
+if SentryGunWeapon then
+	local SILENCE = {
+		"_sound_autofire_start",
+		"_sound_autofire_end",
+		"_sound_autofire_end_empty",
+		"_sound_autofire_end_cooldown",
+	}
+	for _, mname in ipairs(SILENCE) do
+		local orig = SentryGunWeapon[mname]
+		if orig then
+			SentryGunWeapon[mname] = function(self, ...)
+				if is_modded_sentry(self) then
+					if self._autofire_sound_event then
+						pcall(function() self._autofire_sound_event:stop() end)
+						self._autofire_sound_event = nil
+					end
+					return
+				end
+				return orig(self, ...)
+			end
+		end
+	end
+end
+
+-- Kill the laser sight on our TF2 turrets. set_laser_enabled is the single gate
+-- the engine uses to toggle the beam (a separate spawned peqbox unit linked to
+-- the laser bone). For a TF2 sentry we force the "off" path (mode = nil), so the
+-- beam never spawns and any existing one is despawned. update_laser calls this
+-- every tick, so it stays off. Cosmetic only - targeting/firing don't use it.
+if SentryGunWeapon and SentryGunWeapon.set_laser_enabled then
+	local orig_set_laser_enabled = SentryGunWeapon.set_laser_enabled
+	function SentryGunWeapon:set_laser_enabled(mode, blink)
+		if is_modded_sentry(self) then
+			return orig_set_laser_enabled(self, nil, nil)
+		end
+		return orig_set_laser_enabled(self, mode, blink)
 	end
 end
 

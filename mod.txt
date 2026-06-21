@@ -1,8 +1,8 @@
 {
 	"name" : "The Engineer",
-	"description" : "TF2 Engineer-inspired turret perk deck: Sentry Gun + Dispenser throwable, refund-on-destroy, Frontier Justice surge, Recall, wrench repair & scrap-fuelled sentry upgrades, and a defensive damage-resistance core.",
-	"author" : "Ocene",
-	"version" : "0.9",
+	"description" : "TF2 Engineer-inspired turret perk deck: Sentry Gun + Dispenser throwable, refund-on-destroy, Frontier Justice surge, Recall, wrench repair & scrap-fueled sentry upgrades, and a defensive damage-resistance core.",
+	"author" : "Cygenta",
+	"version" : "0.9.1",
 	"color" : "255 140 0",
 	"hooks" : [
 		{ "hook_id" : "lib/tweak_data/skilltreetweakdata", "script_path" : "skilltree.lua" },

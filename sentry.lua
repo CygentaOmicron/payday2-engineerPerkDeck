@@ -16,6 +16,11 @@
 --  The Dispenser is a neutered sentry (see engineer.lua). While it spawns,
 --  EngineerDeck._spawning_dispenser is set; we tag that unit _eng_dispenser
 --  and skip it here so it never counts as one of the player's turrets.
+--
+--  LASER: TF2 sentries have no laser sight, so we don't show it at all. The
+--  emitter MESH is handled here (g_laser stays hidden, tf_g_laser is never
+--  shown). The visible BEAM is a separate spawned unit the engine toggles via
+--  SentryGunWeapon:set_laser_enabled - that's forced off in sentry_ammo.lua.
 -- =====================================================================
 
 EngineerDeck = EngineerDeck or {}
@@ -42,12 +47,16 @@ end
 -- (not rendered) and is left alone. State-driven meshes (g_gun_dmg / g_supp /
 -- g_ap_comp and their shadows) only appear when damaged / suppressed / AP and
 -- are left for later.
+--
+-- LASER: g_laser (the vanilla laser-sight mesh) is hidden, and we deliberately
+-- do NOT show tf_g_laser - TF2 sentries have no laser sight, so the emitter mesh
+-- stays hidden. (The beam unit is killed in sentry_ammo.lua.)
 local TF_SKIN_HIDE = {
 	"g_laser", "g_gun", "g_base", "s_base", "s_gun",
 	"g_shield", "s_shield", "dm_metal_shield",
 }
 local TF_SKIN_SHOW = {
-	"tf_g_laser", "tf_g_gun", "tf_g_base", "tf_s_base", "tf_s_gun",
+	"tf_g_gun", "tf_g_base", "tf_s_base", "tf_s_gun",
 	"tf_g_shield", "tf_s_shield", "tf_dm_metal_shield",
 }
 
@@ -56,63 +65,12 @@ local function set_obj_visible(unit, name, visible)
 	if o then o:set_visibility(visible) end
 end
 
--- --- TF2 laser -------------------------------------------------------
--- The visible laser sight is NOT the g_laser mesh - it's a separate peqbox
--- unit that SentryGunWeapon spawns and LINKS to the object named by
--- _laser_align_name (vanilla "g_laser"):
---     spawn_pos = self._laser_align:position()
---     self._laser_unit = World:spawn_unit("...peqbox...", spawn_pos, spawn_rot)
---     self._unit:link(self._laser_align:name(), self._laser_unit)
--- So the beam rides the g_laser bone. Hiding the g_laser mesh doesn't move it,
--- and moving the g_laser bone after the unit is already linked doesn't move it
--- either (confirmed in game). To put the beam on tf_g_laser we repoint
--- _laser_align to tf_g_laser - which fixes any FUTURE spawn - and, if a laser
--- unit is already up, despawn it and respawn onto tf_g_laser, replicating the
--- engine's own spawn sequence verbatim (including its "set_max_distace"
--- misspelling, which is the real method name). A flag keeps the setup-time and
--- first-fire callers from doubling up.
-local LASER_UNIT = "units/payday2/weapons/wpn_npc_upg_fl_ass_smg_sho_peqbox/wpn_npc_upg_fl_ass_smg_sho_peqbox"
-
-function EngineerDeck.repoint_laser(w, unit)
-	if not w or w._eng_laser_repointed then return end
-	if not (unit and alive(unit)) then return end
-	local tf = unit:get_object(Idstring("tf_g_laser"))
-	if not tf then return end
-	w._laser_align = tf
-	w._laser_align_name = "tf_g_laser"
-	-- if the beam is already up (linked to the old g_laser bone), respawn it
-	if alive(w._laser_unit) then
-		pcall(function()
-			w._laser_unit:base():set_off()
-			w._laser_unit:set_slot(0)
-			w._laser_unit = nil
-			local spawn_pos = tf:position()
-			local spawn_rot = tf:rotation()
-			w._laser_unit = World:spawn_unit(Idstring(LASER_UNIT), spawn_pos, spawn_rot)
-			unit:link(tf:name(), w._laser_unit)
-			w._laser_unit:base():set_npc()
-			w._laser_unit:base():set_on()
-			w._laser_unit:base():set_max_distace(10000)
-			w._laser_unit:base():add_ray_ignore_unit(unit)
-			w._laser_unit:set_visible(false)
-		end)
-	end
-	w._eng_laser_repointed = true
-end
-
 function EngineerDeck.apply_tf_skin(unit)
 	if not (unit and alive(unit)) then return end
 	local base = unit:base()
 	if base and base._eng_tf_skinned then return end
 	for _, name in ipairs(TF_SKIN_HIDE) do set_obj_visible(unit, name, false) end
 	for _, name in ipairs(TF_SKIN_SHOW) do set_obj_visible(unit, name, true) end
-	-- put the laser beam on tf_g_laser (see repoint_laser). The weapon ext holds
-	-- the laser state; grab it here so the beam is right from deploy. If the ext
-	-- isn't ready yet, the first-fire path (apply_tf_muzzles) covers it.
-	pcall(function()
-		local w = unit:weapon()
-		if w then EngineerDeck.repoint_laser(w, unit) end
-	end)
 	if base then base._eng_tf_skinned = true end
 end
 
@@ -162,8 +120,6 @@ function EngineerDeck.apply_tf_muzzles(w)
 		if w._muzzle_effect_table[1] then w._muzzle_effect_table[1].parent = l end
 		if w._muzzle_effect_table[2] then w._muzzle_effect_table[2].parent = r end
 	end
-	-- backup laser repoint, in case the weapon ext wasn't ready at setup
-	EngineerDeck.repoint_laser(w, unit)
 	w._eng_muzzles_done = true
 end
 
