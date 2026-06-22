@@ -10,37 +10,37 @@
 --  _fire_rate_reduction whenever fire mode is switched (normal<->AP), so we
 --  re-multiply by the sentry's stored _eng_fire_mult after each switch.
 --
---  --- FIRE AUDIO (TF2 looping minigun, SuperBLT XAudio) --------------------
---  Goal: our TF2 turrets play the TF2 sentry sound and NOTHING vanilla.
+--  --- TF2 SOUND SUITE (SuperBLT XAudio, all mono OGG, positional) ----------
+--  Goal: our TF2 turrets play TF2 sentry sounds and NOTHING vanilla. Every clip
+--  is loaded through one shared cache (ensure_clip) and played as a positional
+--  XAudio source so it attenuates with distance from the turret. Everything is
+--  gated to TF2-skinned sentries via base._eng_tf_skinned (the visual-skin
+--  marker), so other players' / non-Engineer sentries stay fully vanilla.
 --
---  1) SILENCE VANILLA. The vanilla fire sound is a looping Wwise "autofire"
---     event: SentryGunWeapon:start_autofire -> _sound_autofire_start posts it,
---     and stop_autofire -> _sound_autofire_end/_end_empty/_end_cooldown stop it
---     and post stop/cooldown/empty cues. We override those four methods so that
---     on a TF2-skinned sentry they do nothing (and drop any lingering handle).
---     Non-TF2 sentries keep their vanilla sound.
+--  Events and where each is triggered:
+--    * FIRE  (looping minigun) - here, fire() -> fire_audio (see below)
+--    * SPOT  (target acquired) - here, _sound_autofire_start (debounced)
+--    * EMPTY (out of ammo)      - here, _sound_autofire_end_empty
+--    * SCAN  (idle sweep, loop) - sentry.lua SentryGunBase:update -> sentry_idle_scan
+--    * FINISH(deploy complete)  - sentry.lua setup hook
+--    * EXPLODE (destroyed)      - sentry_death.lua _apply_damage (on death)
+--  play_sentry_sound / sentry_idle_scan are exposed on EngineerDeck so the
+--  base + death files can fire one-shots without duplicating the XAudio plumbing.
 --
---  2) PLAY THE TF2 LOOP. The TF2 shoot file is a ~0.705s LOOP (not a one-shot),
---     so per-shot playback would stack dozens of overlapping copies. Instead we
---     re-trigger the clip on a timer: fire() runs once per shot, so on each shot
---     we check whether LOOP_RETRIGGER seconds have elapsed since the last clip
---     and, if so, start the next one. While the turret is firing this produces a
---     continuous loop; when it stops firing the re-triggers stop and the last
---     clip tails off on its own (a natural spin-down). Re-trigger is decoupled
---     from fire rate, so even a very fast sentry only starts ~1 clip per 0.7s.
---
---  Clips are MONO OGG (XAudio is OGG-only, and stereo ignores 3D position), so
---  the sound attenuates with distance from the turret. Gated to TF2-skinned
---  sentries via base._eng_tf_skinned (same marker as the visual skin), so this
---  only ever touches the local Engineer's own turrets.
+--  FIRE detail: the TF2 shoot file is a ~0.7s LOOP, so we re-trigger it on a
+--  timer rather than per-shot (fire() runs once per shot; we start the next clip
+--  once LOOP_RETRIGGER has elapsed). Continuous while firing, tails off when it
+--  stops. SILENCE: the vanilla fire sound is a looping Wwise "autofire" event
+--  posted by _sound_autofire_start/_end/_end_empty/_end_cooldown - we override
+--  all four so a TF2 sentry drops the vanilla handle (and two of them now post a
+--  TF2 cue instead). Non-TF2 sentries keep their vanilla sound.
 --
 --  SAFETY: blt.xaudio.loadbuffer raises a FATAL, pcall-proof error on a
---  missing/empty/bad file, so we (1) verify the file is a real OggS container
---  with io.open BEFORE loading, and (2) only attempt to load the buffer ONCE.
---  A bad/missing file means silence, never a crash/freeze.
---
---  The Dispenser chassis (_eng_dispenser) is a neutered sentry - it never fires,
---  but we short-circuit it here anyway so no ammo/audio logic ever touches it.
+--  missing/empty/bad file, so we (1) verify each file is a real OggS container
+--  with io.open BEFORE loading, and (2) only attempt to load any given buffer
+--  ONCE (cached). A bad/missing file means that one clip is silent, never a
+--  crash/freeze. The Dispenser chassis (_eng_dispenser) is short-circuited so no
+--  ammo/audio logic ever touches it.
 --
 --  --- TF2 LASER (disabled) -------------------------------------------------
 --  TF2 sentries have no laser sight. The visible beam is a separate peqbox unit
@@ -85,8 +85,27 @@ local SHOT_MAX_DIST  = 6000     -- cm: inaudible beyond this
 local LOOP_RETRIGGER = 0.06     -- s: start the next clip this long after the last one. Slightly under the
                                 -- ~0.705s clip length so the loop has no audible gap. Tune up/down to taste.
 
--- single shared buffer for the fire loop; loaded lazily, cached, tried once
-local fire_buf = { buffer = nil, tried = false }
+-- --- the other TF2 event clips (mono OGG, placed alongside the fire clip) -----
+-- File names are on EngineerDeck so sentry.lua / sentry_death.lua can reference
+-- them. Volumes/ranges are local tunables. Missing files just stay silent.
+EngineerDeck.SND = EngineerDeck.SND or {}
+EngineerDeck.SND.FINISH  = "sentry_finish.ogg"   -- deploy complete
+EngineerDeck.SND.SPOT    = "sentry_spot.ogg"     -- target acquired
+EngineerDeck.SND.EMPTY   = "sentry_empty.ogg"    -- out of ammo
+EngineerDeck.SND.SCAN    = "sentry_scan.ogg"     -- idle sweep (looped via retrigger)
+EngineerDeck.SND.EXPLODE = "sentry_explode.ogg"  -- destroyed
+
+local FINISH_VOLUME  = 0.60
+local SPOT_VOLUME    = 0.50
+local EMPTY_VOLUME   = 0.55
+local EXPLODE_VOLUME = 0.85
+local SCAN_VOLUME    = 0.22     -- subtle; it loops constantly while idle
+
+local SPOT_COOLDOWN  = 3.0      -- s: don't re-beep "spotted" more often than this per turret
+local SCAN_RETRIGGER = 3.20     -- s: spacing of the idle scan loop (~just under the 3.25s clip, no gap)
+local FIRE_RECENCY   = 0.35     -- s: treat the turret as "engaging" (no idle scan) for this long after a shot
+
+EngineerDeck.play_sentry_sound = EngineerDeck.play_sentry_sound  -- fwd ref (defined below)
 
 local function ammo_total(w)
 	if w.ammo_total then return w:ammo_total() end
@@ -127,27 +146,51 @@ local function is_valid_ogg(path)
 	return ok and valid == true
 end
 
--- load the fire buffer ONCE (cached). Never retries, so a bad file can't loop.
-local function ensure_fire_buffer()
-	if fire_buf.buffer then return true end
-	if fire_buf.tried then return false end
-	fire_buf.tried = true
-	if not (blt and blt.xaudio and XAudio and XAudio.Buffer and XAudio.Source) then return false end
+-- shared clip cache: file name -> { buffer = <XAudio.Buffer>|nil, tried = bool }.
+-- Each clip is verified + loaded at most ONCE; a bad/missing file is logged and
+-- stays nil (silent) forever after, so it can never loop on a failing load.
+local clip_cache = {}
+
+local function ensure_clip(file)
+	local c = clip_cache[file]
+	if not c then c = { buffer = nil, tried = false }; clip_cache[file] = c end
+	if c.buffer then return c.buffer end
+	if c.tried then return nil end
+	c.tried = true
+	if not (blt and blt.xaudio and XAudio and XAudio.Buffer and XAudio.Source) then return nil end
 	pcall(function() blt.xaudio.setup() end)
-	local path = SND_DIR .. FIRE_CLIP
+	local path = SND_DIR .. file
 	if not is_valid_ogg(path) then
-		log("[EngineerDeck] TF2 fire clip missing/empty/not-ogg: " .. tostring(path))
-		return false
+		log("[EngineerDeck] TF2 sentry clip missing/empty/not-ogg: " .. tostring(path))
+		return nil
 	end
-	pcall(function() fire_buf.buffer = XAudio.Buffer:new(path) end)
-	return fire_buf.buffer ~= nil
+	pcall(function() c.buffer = XAudio.Buffer:new(path) end)
+	return c.buffer
+end
+
+-- play ONE positional instance of a clip at a unit. Returns the source (or nil).
+-- The source auto-plays and auto-closes when the clip finishes.
+function EngineerDeck.play_sentry_sound(unit, file, volume, min_dist, max_dist)
+	local buf = ensure_clip(file)
+	if not buf then return nil end
+	local src
+	pcall(function()
+		src = XAudio.Source:new(buf)
+		if not src then return end
+		if src.set_position and unit and alive(unit) then src:set_position(unit:position()) end
+		if src.set_min_distance then src:set_min_distance(min_dist or SHOT_MIN_DIST) end
+		if src.set_max_distance then src:set_max_distance(max_dist or SHOT_MAX_DIST) end
+		if src.set_volume then src:set_volume(volume or SHOT_VOLUME) end
+	end)
+	return src
 end
 
 -- start one positional instance of the fire loop at the turret
 local function play_fire_loop(sentry)
-	if not ensure_fire_buffer() then return end
+	local buf = ensure_clip(FIRE_CLIP)
+	if not buf then return end
 	pcall(function()
-		local src = XAudio.Source:new(fire_buf.buffer)   -- auto-plays and auto-closes when done
+		local src = XAudio.Source:new(buf)   -- auto-plays and auto-closes when done
 		if not src then return end
 		if src.set_position and alive(sentry) then src:set_position(sentry:position()) end
 		if src.set_min_distance then src:set_min_distance(SHOT_MIN_DIST) end
@@ -165,6 +208,26 @@ local function fire_audio(self, fired)
 	if self._eng_loop_next and now < self._eng_loop_next then return end
 	self._eng_loop_next = now + LOOP_RETRIGGER
 	play_fire_loop(self._unit)
+end
+
+-- IDLE SCAN: called every frame for a sentry (from sentry.lua's SentryGunBase
+-- :update hook). Plays the TF2 scan sweep on a loop while the turret is idle -
+-- alive, TF2-skinned, not the Dispenser chassis, and not firing (we treat a shot
+-- in the last FIRE_RECENCY seconds as "engaging" so scan never plays over fire).
+-- `base` is the SentryGunBase extension; `t` is the update game time.
+function EngineerDeck.sentry_idle_scan(base, t)
+	if not base or not base._eng_tf_skinned then return end
+	if base._eng_dispenser or base._eng_dead then return end
+	local unit = base._unit
+	if not (unit and alive(unit)) then return end
+	t = t or (TimerManager and TimerManager:game() and TimerManager:game():time())
+	if not t then return end
+	-- engaging? (fired very recently) -> let the fire loop own the audio
+	local w = base._weapon
+	if w and w._eng_loop_next and t < (w._eng_loop_next + FIRE_RECENCY) then return end
+	if base._eng_scan_next and t < base._eng_scan_next then return end
+	base._eng_scan_next = t + SCAN_RETRIGGER
+	EngineerDeck.play_sentry_sound(unit, EngineerDeck.SND.SCAN, SCAN_VOLUME)
 end
 
 -- set up a TF2-skinned sentry's two muzzle slots onto the model's barrels.
@@ -293,26 +356,61 @@ if SentryGunWeapon and SentryGunWeapon.fire then
 	end
 end
 
--- Silence the vanilla Wwise fire sound on our TF2 turrets. These four methods
--- are the only places the sentry posts its autofire start/stop/cooldown/empty
--- cues; for a TF2-skinned sentry we drop them entirely (the TF2 loop plays
--- instead). Every other sentry keeps its vanilla sound untouched.
+-- Replace the vanilla Wwise fire cues on our TF2 turrets. These four methods are
+-- the only places the sentry posts its autofire start/stop/cooldown/empty cues.
+-- For a TF2-skinned sentry we always drop the lingering vanilla handle; two of
+-- them additionally post a TF2 cue (SPOT on engage, EMPTY on running dry). Every
+-- non-TF2 sentry keeps its vanilla sound untouched.
 if SentryGunWeapon then
-	local SILENCE = {
-		"_sound_autofire_start",
-		"_sound_autofire_end",
-		"_sound_autofire_end_empty",
-		"_sound_autofire_end_cooldown",
-	}
-	for _, mname in ipairs(SILENCE) do
+	local function drop_vanilla_handle(self)
+		if self._autofire_sound_event then
+			pcall(function() self._autofire_sound_event:stop() end)
+			self._autofire_sound_event = nil
+		end
+	end
+
+	-- engage -> "spotted" beep (debounced per turret so re-engaging doesn't spam)
+	local orig_start = SentryGunWeapon._sound_autofire_start
+	if orig_start then
+		SentryGunWeapon._sound_autofire_start = function(self, ...)
+			if is_modded_sentry(self) then
+				drop_vanilla_handle(self)
+				pcall(function()
+					local now = TimerManager:game():time()
+					if not self._eng_spot_next or now >= self._eng_spot_next then
+						self._eng_spot_next = now + SPOT_COOLDOWN
+						EngineerDeck.play_sentry_sound(self._unit, EngineerDeck.SND.SPOT, SPOT_VOLUME)
+					end
+				end)
+				return
+			end
+			return orig_start(self, ...)
+		end
+	end
+
+	-- ran dry -> "empty" click
+	local orig_empty = SentryGunWeapon._sound_autofire_end_empty
+	if orig_empty then
+		SentryGunWeapon._sound_autofire_end_empty = function(self, ...)
+			if is_modded_sentry(self) then
+				drop_vanilla_handle(self)
+				pcall(function()
+					EngineerDeck.play_sentry_sound(self._unit, EngineerDeck.SND.EMPTY, EMPTY_VOLUME)
+				end)
+				return
+			end
+			return orig_empty(self, ...)
+		end
+	end
+
+	-- plain stop / cooldown -> just silence the vanilla loop (the fire clip tails
+	-- off on its own; the idle scan resumes once FIRE_RECENCY has elapsed)
+	for _, mname in ipairs({ "_sound_autofire_end", "_sound_autofire_end_cooldown" }) do
 		local orig = SentryGunWeapon[mname]
 		if orig then
 			SentryGunWeapon[mname] = function(self, ...)
 				if is_modded_sentry(self) then
-					if self._autofire_sound_event then
-						pcall(function() self._autofire_sound_event:stop() end)
-						self._autofire_sound_event = nil
-					end
+					drop_vanilla_handle(self)
 					return
 				end
 				return orig(self, ...)

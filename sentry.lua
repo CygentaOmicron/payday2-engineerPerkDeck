@@ -1,7 +1,7 @@
 -- =====================================================================
 --  The Engineer - sentry registration  (hooked onto SentryGunBase)
 -- =====================================================================
---  Two jobs here:
+--  Jobs here:
 --   1. Register the player's own sentries so Recall can find them. The
 --      refund-on-destruction logic lives in sentry_death.lua (hooked onto
 --      SentryGunDamage), because destruction goes through the damage ext.
@@ -12,10 +12,18 @@
 --      and show the tf_* set, so only THIS player's Engineer sentries look
 --      like TF2 turrets. Networked unit name is unchanged, so non-modded
 --      peers still draw a vanilla sentry. (MP peer broadcast: TODO.)
+--   3. TF2 sound events: play the "deploy finished" cue when a TF2 sentry
+--      spawns, and drive the idle SCAN loop every frame via SentryGunBase
+--      :update (the base ext's update is enabled in setup, disabled on death,
+--      so this ticks exactly while the turret is live). The actual audio +
+--      gating live in sentry_ammo.lua (EngineerDeck.play_sentry_sound /
+--      sentry_idle_scan); the fire / spot / empty / explode cues are wired at
+--      their own triggers (sentry_ammo.lua / sentry_death.lua).
 --
 --  The Dispenser is a neutered sentry (see engineer.lua). While it spawns,
 --  EngineerDeck._spawning_dispenser is set; we tag that unit _eng_dispenser
---  and skip it here so it never counts as one of the player's turrets.
+--  and skip it here so it never counts as one of the player's turrets (and so
+--  it gets no skin, no deploy cue and no idle scan).
 --
 --  LASER: TF2 sentries have no laser sight, so we don't show it at all. The
 --  emitter MESH is handled here (g_laser stays hidden, tf_g_laser is never
@@ -136,8 +144,31 @@ if SentryGunBase then
 				if EngineerDeck.is_active and EngineerDeck.is_active(1) and is_local_owner(self) then
 					if EngineerDeck.register_sentry then EngineerDeck.register_sentry(self._unit) end
 					EngineerDeck.apply_tf_skin(self._unit)
+					-- TF2 "deploy finished" cue. Hold the idle scan off briefly so
+					-- the deploy sound and the first scan sweep don't stack on the
+					-- same frame. (Finish volume tunable: keep in sync with
+					-- FINISH_VOLUME in sentry_ammo.lua.)
+					if EngineerDeck.play_sentry_sound and EngineerDeck.SND then
+						EngineerDeck.play_sentry_sound(self._unit, EngineerDeck.SND.FINISH, 0.60)
+					end
+					pcall(function()
+						local now = TimerManager and TimerManager:game() and TimerManager:game():time()
+						if now then self._eng_scan_next = now + 1.8 end
+					end)
 				end
 			end)
+		end)
+	end
+
+	-- Idle SCAN loop: base-ext update ticks every frame while the turret is live
+	-- (enabled in setup, disabled in on_death). sentry_idle_scan does all the
+	-- gating (TF2-only, not the Dispenser, not dead, not currently firing) and
+	-- the retrigger timing, so this stays a thin per-frame poke.
+	if SentryGunBase.update then
+		Hooks:PostHook(SentryGunBase, "update", "EngineerDeck_SentryScanTick", function(self, unit, t, dt)
+			if EngineerDeck.sentry_idle_scan then
+				pcall(EngineerDeck.sentry_idle_scan, self, t)
+			end
 		end)
 	end
 end
